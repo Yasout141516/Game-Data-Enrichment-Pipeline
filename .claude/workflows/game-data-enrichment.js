@@ -116,7 +116,7 @@ const titleContexts = uniqueTitles.map(t => ({
 }))
 
 phase('Research')
-const groups = chunk(titleContexts, 10)
+const groups = chunk(titleContexts, 20)
 log(`Researching ${uniqueTitles.length} unique titles (of ${cleaned.length} rows) in ${groups.length} groups...`)
 
 function formatContexts(group) {
@@ -127,15 +127,15 @@ const groupResults = await parallel(groups.map(group => async () => {
   const [mc, steam, steamCommunity] = await parallel([
     () => agent(
       `Research Metacritic score, genre, and year for these titles per your instructions. Each line gives the canonical title plus the original scraped listing in parentheses -- use the listing to disambiguate (e.g. edition/subtitle hints) when the title alone could match more than one real game, but report results keyed by the canonical title (the quoted part before the parenthetical):\n${formatContexts(group)}`,
-      { agentType: 'metacritic-researcher', schema: METACRITIC_SCHEMA, phase: 'Research' }
+      { agentType: 'metacritic-researcher', schema: METACRITIC_SCHEMA, phase: 'Research', model: 'haiku' }
     ),
     () => agent(
       `Research Steam user score for these titles per your instructions. Each line gives the canonical title plus the original scraped listing in parentheses -- use the listing to disambiguate (e.g. edition/subtitle hints) when the title alone could match more than one real game, but report results keyed by the canonical title (the quoted part before the parenthetical):\n${formatContexts(group)}`,
-      { agentType: 'steam-researcher', schema: STEAM_SCHEMA, phase: 'Research' }
+      { agentType: 'steam-researcher', schema: STEAM_SCHEMA, phase: 'Research', model: 'haiku' }
     ),
     () => agent(
       `Estimate Steam Community sentiment for these titles per your instructions. Each line gives the canonical title plus the original scraped listing in parentheses -- use the listing to disambiguate (e.g. edition/subtitle hints) when the title alone could match more than one real game, but report results keyed by the canonical title (the quoted part before the parenthetical):\n${formatContexts(group)}`,
-      { agentType: 'steam-community-sentiment', schema: STEAM_COMMUNITY_SCHEMA, phase: 'Research' }
+      { agentType: 'steam-community-sentiment', schema: STEAM_COMMUNITY_SCHEMA, phase: 'Research', model: 'haiku' }
     ),
   ])
   return { mc, steam, steamCommunity }

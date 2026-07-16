@@ -52,19 +52,31 @@ Ran a hand-picked 17-title batch (not the full list) covering:
 
 Overall: the pipeline is solid. The one flagged limitation (Saints Row-style franchise collisions) should be watched during the full run rather than assumed fixed.
 
+## Architecture change after batch 2: agentic research replaced by a scripted pipeline
+
+Batches 1-2 (rows in `game_enrichment_checkpoint.jsonl` with `batch: 1` or `2`) ran through the original all-agentic `.claude/workflows/game-data-enrichment.js` (later a Haiku/group-size-20 tweak was tried on that same workflow, but never actually completed a batch). Both are now superseded: starting with batch 3, Metacritic/Steam data comes from `.claude/scripts/research.js` (deterministic HTTP calls, zero LLM tokens), with `title-cleaner` and a repurposed `steam-community-sentiment` doing the only remaining LLM work, plus a new `match-disambiguator` agent for flagged franchise-collision-risk titles. See `context.md`'s "Current architecture" section for the full per-batch flow and the data-quality gotchas found while building it. Rows from batch 1-2 were produced by a different pipeline — keep that in mind if a quality difference ever needs investigating.
+
+## Batch 3 validation run (done)
+
+Ran the new scripted pipeline end-to-end on batch 3 (rows 201-300 of the pre-cleaned list) to validate it before committing to the rest of the run. Results, appended to the checkpoint (`batch: 3`):
+
+- Null rates: metacritic 23%, steam 24%, sentiment 28% — higher than the batch 1-2 baseline (13%/15%/8%). Spot-checked the cause rather than assuming the new pipeline is worse:
+  - Some are genuinely correct nulls: e.g. Warcraft III: Reforged is Battle.net-exclusive, not on Steam at all.
+  - At least one is a real gap in Steam's own `storesearch` API, not a bug in `research.js`: it returned zero results for "Transformers: Devastation" even though the game has a real, live Steam page (confirmed via direct search). No fallback for this exists yet — see `context.md`'s "Data-quality gotchas" section.
+  - This batch's title mix (many older/niche Tom Clancy's and Transformers entries, some indie titles) likely also has genuinely thinner coverage than average — worth re-checking against a more mainstream-heavy batch before concluding the null rate is a systemic regression.
+- Bugs found and fixed *during* this validation (not before, since they only surfaced under real data): the edition-signal-recheck heuristic in `research.js` originally fired on ~40% of titles (any edition-tag word in the hint), overwhelmingly false positives (e.g. "Complete Edition" on a game with no reboot risk) — fixed to require a genuine sibling candidate before flagging. Also found `steam-community-sentiment` was using `WebSearch`/`WebFetch` on its own despite instructions not to, because omitting `tools:` in frontmatter inherits the full toolset for a direct `Agent`-tool call (unlike the `Workflow`-specific behavior already documented) — fixed with an explicit `tools: []`.
+- `match-disambiguator` correctly returned null rather than guessing in two informative cases: "WARRIORS OROCHI 4 Ultimate" (every Steam candidate was DLC/cosmetic packs, no base game found) and the ambiguous Metacritic entries for "Warhammer 40,000: Space Marine 2" (none of the candidates were actually the right game).
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects).
-2. Split into batches of 100 (~14 batches; adjust if the user prefers a different size).
-3. For each batch, call:
-   ```
-   Workflow({
-     scriptPath: 'C:\Users\USER\OneDrive\Claude\.claude\workflows\game-data-enrichment.js',
-     args: { titles: batch.map(x => x.pre_cleaned) }
-   })
-   ```
-   (If a custom agent file was just touched, expect the registry-lag gotcha above — retry once after the "new agent types available" notification.)
-4. On each batch's completion, the workflow returns rows keyed by its own echoed `raw` field — that's actually the *pre-cleaned* string, not the true original filename. Zip the batch's input array back to the workflow's output **by index** (order is preserved end-to-end) to recover the true original filename for the "Original Filename" column. Append the joined rows to a checkpoint file (e.g. `game_enrichment_checkpoint.jsonl`) immediately, so a crash mid-run only loses the in-flight batch.
-5. Post a brief status update in chat after each batch (e.g. "Batch 4/14 done — 400/1,399 processed, N blanks so far").
-6. After all batches: read the full checkpoint, build the final workbook with columns `Original Filename`, `Clean Title`, `Metacritic Score`, `Steam User Score`, `Steam Community Sentiment (Est., 0-10)`, `Genre`, `Year of Release`. Sort descending by Metacritic Score (blanks last), Steam Score as tiebreaker. Save as `C:\Users\USER\OneDrive\Claude\Game.xlsx` (new file — do not overwrite `Book1 (3).xlsx`).
-7. Spot-check ~10 random rows against Metacritic/Steam directly, and specifically re-check any other "Saints Row"-style franchise-collision titles in the full list given the known limitation above.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-3 (rows 1-300) are done.
+2. Split the remainder (rows 301-1399, ~11 batches of 100) into batches, adjusting size if preferred.
+3. For each batch, per `context.md`'s "Current architecture":
+   - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
+   - Dedupe by `clean_title`.
+   - `Bash` → `node .claude/scripts/research.js <input.json> <output.json>` on the unique `{title, hint}` list (`hint` = the raw listing(s) behind that clean title, same disambiguation-hint pattern as before).
+   - If `research.js` flagged anything under `ambiguous`: `Agent` tool → `match-disambiguator` on just the flagged items, merge the chosen candidate's data (and review snippets) back in.
+   - `Agent` tool → `steam-community-sentiment` once on all unique titles' review snippets.
+   - Merge back to every original raw row by `clean_title`, append to `game_enrichment_checkpoint.jsonl` immediately (crash mid-run only loses the in-flight batch), post a one-line status update (e.g. "Batch 4/14 done — 400/1,399 processed, N blanks so far").
+4. After all batches: read the full checkpoint, build the final workbook with columns `Original Filename`, `Clean Title`, `Metacritic Score`, `Steam User Score`, `Steam Community Sentiment (Est., 0-10)`, `Genre`, `Year of Release`. Sort descending by Metacritic Score (blanks last), Steam Score as tiebreaker. Save as `C:\Users\USER\OneDrive\Claude\Game.xlsx` (new file — do not overwrite `Book1 (3).xlsx`).
+5. Spot-check ~10 random rows against Metacritic/Steam directly, and specifically re-check any "Saints Row"-style franchise-collision titles in the full list — confirmed to still be a real risk even under the scripted pipeline (see `context.md`).
