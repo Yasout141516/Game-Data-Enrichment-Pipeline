@@ -129,10 +129,19 @@ Ran the scripted pipeline on batch 10 (rows 901-1000). Results appended to the c
 - Null rates: 18% metacritic, 22% steam, 26% sentiment — the lowest sentiment-null rate in several batches, driven by a mainstream AAA-heavy title mix (GTA, Halo, Hitman, Horizon, Hogwarts Legacy, Hades) with unusually thick Steam Community discussion.
 - Also mid-batch: a user tool-rejection interrupted the sentiment dispatch after chunk 1 completed; resumed cleanly on request without needing to redo chunk 1.
 
+## Batch 11 run (done)
+
+Ran the scripted pipeline on batch 11 (rows 1001-1100). Results appended to the checkpoint (`batch: 11`, 100 rows, checkpoint now at 1100 total). This batch crosses a boundary in the source list where the alphabetical ordering restarts (K-titles jump straight to A-titles) — the source spreadsheet appears to be multiple alphabetized segments concatenated, not a single continuous A-Z sort. Not a bug, just a property of the input; noted here in case a future batch's row range looks similarly "out of order."
+
+- 83 unique titles, 36 flagged ambiguous (~43%) — a dense Age of Empires/Anno/Arma/Assassin's Creed cluster with heavy Definitive/Anniversary/Gold Edition noise. `match-disambiguator` correctly rejected the single "confident" Metacritic match for `Age of Empires III` and bare `Age of Empires` (both hints pointed at Definitive Edition remasters, but the only candidate offered was the classic-era base game) — same pattern as batch 10's GTA San Andreas/Trilogy rejections, now confirmed recurring across different franchises. Also correctly picked `Just Cause 4 Reloaded` (score 64) over four higher-scoring but DLC-only candidates (Renegade Pack, Digital Deluxe Content, Brawler Mech, The Dragon) for bare "Just Cause 4" — avoided the trap of picking the best-scoring candidate when it wasn't the base game.
+- **New gotcha, same shape as batch 10's `Graveyard Shift` genre leak, now confirmed as a repeatable pattern, not a one-off**: after `match-disambiguator` rejects a metacritic candidate (score/year correctly nulled), the `genre` field can still leak through from that same rejected candidate if the merge script only clears `metacritic_score`/`year` and not `genre`. Caught and manually nulled for `Age of Empires III` and bare `Age of Empires` this batch before appending. **This is now a confirmed recurring bug in the manual merge step, not the agents** — the merge logic must always null `genre` alongside `metacritic_score`/`year` when a metacritic choice is rejected (unless steam independently supplies a genre), not just on the specific titles where it happens to get noticed. Worth hard-coding this into a reusable merge script rather than re-deriving it by hand each batch.
+- Sentiment chunking (4 chunks of ~21) passed clean on the first try, all 83 titles covered with no truncation — first fully clean run since batch 9.
+- Null rates: 19% metacritic, 17% steam, 26% sentiment — an Assassin's Creed-heavy back half of the batch kept steam/metacritic coverage relatively high (most mainline AC entries have real, findable Steam pages) despite the franchise's heavy edition-tag noise requiring disambiguation on nearly every title.
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-10 (rows 1-1000) are done.
-2. Split the remainder (rows 1001-1399, ~4 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-11 (rows 1-1100) are done.
+2. Split the remainder (rows 1101-1399, ~3 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
