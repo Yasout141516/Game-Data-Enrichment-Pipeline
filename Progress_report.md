@@ -110,10 +110,19 @@ Ran the scripted pipeline on batch 8 (rows 701-800). Results appended to the che
 - **Sentiment-chunk truncation recurred a third time, again caller-side**: this batch's chunk1 prompt was cut short at 12 of 20 titles (stopped after "Remnant II"), and chunk4's prompt dropped the last 2 of 18 titles (`Far Cry 2`, `Far Cry 3`). Both caught by the now-standard post-merge diff check before touching the checkpoint, and both re-run standalone. This is now the dominant failure mode of the whole pipeline (3 of the last 3 batches) — worth considering a structural fix (e.g. always print the exact chunk title list immediately before writing each sentiment prompt, or count titles in the prompt text against the source chunk file length before sending) rather than continuing to catch it after the fact every time.
 - Null rates: 22% metacritic, 35% steam, 35% sentiment — mostly F1/eFootball/PES yearly-sports-entry thinness plus a few licensed titles (Family Guy, Road Rash) genuinely absent from modern Steam listings.
 
+## Batch 9 run (done)
+
+Ran the scripted pipeline on batch 9 (rows 801-900). Results appended to the checkpoint (`batch: 9`, 100 rows, checkpoint now at 900 total).
+
+- 82 unique titles, 38 flagged ambiguous (~46%) — a Far Cry/FIFA/Final Fantasy/Forza/God of War franchise-heavy batch with lots of yearly-sports and remaster/definitive-edition noise. `match-disambiguator` correctly nulled `Fuel` (none of 5 Steam candidates were the real 2009 Codemasters racing game) and `Gears of War` (neither Steam candidate — the "E-Day" prequel nor the "Reloaded" remaster — was the actual original 2006/2007 game).
+- **First batch since the truncation bug was flagged as the dominant failure mode (batch 8) where all 4 sentiment chunks passed the mandatory post-merge diff check clean on the first try — no re-runs needed.** All 4 chunk agents were dispatched in a single parallel message this time with the exact chunk-file content embedded directly (verified against expected per-chunk counts — 21/21/21/19 — before dispatch), rather than hand-copied; worth continuing this exact discipline (count-verify chunk file content immediately before pasting into the prompt) for future batches, since it appears to be what actually prevents the truncation, not just the after-the-fact diff check.
+- Null rates: 12% metacritic, 30% steam, 34% sentiment — elevated steam/sentiment nulls driven by a large FIFA yearly-entry run (FIFA 14 through 23, 9 titles, all correctly null — EA delisted/never Steam-listed most older FIFA entries) plus several Forza/God of War classic entries (Forza Horizon 3/4, God of War III, God of War: Ascension) with thin or no current Steam review data.
+- Session paused here at the user's request ("stop", then "continue but finish up to batch 9 only") — batch 9 is fully committed to the checkpoint and this report; batch 10 has not been started.
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-8 (rows 1-800) are done.
-2. Split the remainder (rows 801-1399, ~6 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-9 (rows 1-900) are done.
+2. Split the remainder (rows 901-1399, ~5 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
