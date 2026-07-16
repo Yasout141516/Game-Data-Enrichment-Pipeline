@@ -85,10 +85,19 @@ Ran the scripted pipeline on batch 5 (rows 401-500 of the pre-cleaned list). Res
 - **`steam-community-sentiment` again silently truncated one prompt's title list — this time it was the caller's fault, not the agent's.** When hand-copying 20 titles' snippets into chunk 2's prompt text, 3 titles at the end of the chunk (`Men of War II`, `Men of War: Assault Squad`, `Men of War: Assault Squad 2 - Cold War`) were cut off and never sent. Caught by comparing the actual saved chunk-file's title list against the prompt that was sent, not just checking returned-array-length against expected-count (which wouldn't have caught it, since the agent correctly returned exactly as many results as titles it was actually given — the mismatch was between the chunk file and the prompt, not between the prompt and the response). **New verification step for future batches: after building each sentiment chunk file, print its exact title list and diff it against what actually gets pasted into the agent prompt, don't just trust the copy-paste.**
 - Null rates: 14% metacritic, 27% steam, 32% sentiment — steam/sentiment nulls elevated by a run of near-snippet-free titles (Monster Energy Supercross 2-5, Minecraft Story Mode episodes, several Men of War spin-offs) that are real, released games but apparently thin on Steam Community discussion.
 
+## Batch 6 run (done)
+
+Ran the scripted pipeline on batch 6 (rows 501-600). Results appended to the checkpoint (`batch: 6`, 100 rows, checkpoint now at 600 total).
+
+- Caught a real **title-cleaner error** this batch, not just a process mistake: `"Outpost-Infinity Siege"` was cleaned to `"Infinity Siege"`, treating "Outpost" as a stray repack-tag fragment — but `research.js`'s Steam candidate came back as `"Outpost: Infinity Siege"` (the actual, correct title; a real 2023 game). Corrected the clean_title to match the confirmed real title before building the sentiment input and final rows, rather than trusting the title-cleaner's split. **Lesson for future batches**: when a research-script candidate's real name doesn't match the clean_title fed into it, trust the confirmed data source over the LLM guess — spot-check candidate names against clean_title, not just scores.
+- 31 of 88 unique titles flagged ambiguous, mostly Need for Speed/Naruto/Mortal Kombat/Mount & Blade franchise entries with many same-year re-releases and demo/DLC noise in Steam's search results; `match-disambiguator` nulled several correctly (e.g. `Mortal Kombat` base title had no real matching Steam entry among MK1/11/X results, so it returned null rather than picking a wrong numbered game).
+- **`steam-community-sentiment` truncation recurred, again on my (caller) side**: the last sentiment chunk's prompt was cut off 6 titles early (`Outlast`, `Outpost: Infinity Siege`, `Outriders`, `Outward`, `Outward: The Soroboreans`, `Overkill's The Walking Dead` never got sent). Caught immediately by the mandatory post-merge diff check (comparing `batch6_resolved.json`'s unique titles against the sentiment-results file's title list) before appending to the checkpoint — this check is now proven to catch the failure mode reliably and should stay a required step every batch, not just when something looks off.
+- Null rates: 26% metacritic, 47% steam, 57% sentiment — this batch's title mix (NBA 2K yearly entries, MotoGP yearly entries, older Need for Speed titles) is genuinely thin on both Metacritic coverage and Steam Community discussion; a real content-mix effect, not a pipeline regression (spot-checked a few: e.g. NBA 2K14-22 mostly have no current Steam listing history in `storesearch`).
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-5 (rows 1-500) are done.
-2. Split the remainder (rows 501-1399, ~9 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-6 (rows 1-600) are done.
+2. Split the remainder (rows 601-1399, ~8 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
