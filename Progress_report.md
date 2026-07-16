@@ -102,10 +102,18 @@ Ran the scripted pipeline on batch 7 (rows 601-700). Results appended to the che
 - Sentiment-chunk verification (mandatory since batch 6) passed clean this run for all 4 chunks — first batch since the process was introduced where every chunk's prompt matched its saved chunk file on the first try, no re-runs needed.
 - Null rates: 35% metacritic, 25% steam, 38% sentiment — driven by a Pokémon/Nintendo-Switch cluster (5 titles: Brilliant Diamond & Shining Pearl, Legends: Arceus, Let's Go, Scarlet & Violet, Sword & Shield) that are correctly null across all three fields since they were never released on PC/Steam at all, plus the usual PES-yearly-entry thinness.
 
+## Batch 8 run (done)
+
+Ran the scripted pipeline on batch 8 (rows 701-800). Results appended to the checkpoint (`batch: 8`, 100 rows, checkpoint now at 800 total).
+
+- 78 unique titles, 39 flagged ambiguous — driven by a dense Resident Evil/Fallout/Far Cry/F.E.A.R. franchise cluster with lots of "Remake"/"Remaster"/"HD" re-release noise. `match-disambiguator` made several well-reasoned rejections: `Resident Evil 4`'s hint bundled both true 2023-remake listings and classic-2005-era "HD Project"/"Ultimate HD Edition" fan-project listings under one clean title with only the remake as a candidate, so it correctly nulled both fields rather than mis-attributing remake data to what might be a classic-game listing; similarly rejected `Far Cry 3`'s single (base 2012) candidate against a "Remastered" hint that plausibly pointed at the separately-released Far Cry 3 Classic Edition, which wasn't offered.
+- **Sentiment-chunk truncation recurred a third time, again caller-side**: this batch's chunk1 prompt was cut short at 12 of 20 titles (stopped after "Remnant II"), and chunk4's prompt dropped the last 2 of 18 titles (`Far Cry 2`, `Far Cry 3`). Both caught by the now-standard post-merge diff check before touching the checkpoint, and both re-run standalone. This is now the dominant failure mode of the whole pipeline (3 of the last 3 batches) — worth considering a structural fix (e.g. always print the exact chunk title list immediately before writing each sentiment prompt, or count titles in the prompt text against the source chunk file length before sending) rather than continuing to catch it after the fact every time.
+- Null rates: 22% metacritic, 35% steam, 35% sentiment — mostly F1/eFootball/PES yearly-sports-entry thinness plus a few licensed titles (Family Guy, Road Rash) genuinely absent from modern Steam listings.
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-7 (rows 1-700) are done.
-2. Split the remainder (rows 701-1399, ~7 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-8 (rows 1-800) are done.
+2. Split the remainder (rows 801-1399, ~6 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
