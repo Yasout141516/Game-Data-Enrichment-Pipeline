@@ -119,10 +119,20 @@ Ran the scripted pipeline on batch 9 (rows 801-900). Results appended to the che
 - Null rates: 12% metacritic, 30% steam, 34% sentiment — elevated steam/sentiment nulls driven by a large FIFA yearly-entry run (FIFA 14 through 23, 9 titles, all correctly null — EA delisted/never Steam-listed most older FIFA entries) plus several Forza/God of War classic entries (Forza Horizon 3/4, God of War III, God of War: Ascension) with thin or no current Steam review data.
 - Session paused here at the user's request ("stop", then "continue but finish up to batch 9 only") — batch 9 is fully committed to the checkpoint and this report; batch 10 has not been started.
 
+## Batch 10 run (done)
+
+Ran the scripted pipeline on batch 10 (rows 901-1000). Results appended to the checkpoint (`batch: 10`, 100 rows, checkpoint now at 1000 total).
+
+- 83 unique titles, 37 flagged ambiguous (~45%) — a dense GTA/GRID/Halo/Hitman/Homefront/Horizon franchise cluster with heavy remaster/definitive-edition/complete-edition noise. `match-disambiguator` correctly nulled several cases with no true single answer: `Graveyard Shift` (5 unrelated Steam games share the exact name, no disambiguating signal in the hint), `Jagged Alliance` (bare franchise name behind a "Collector's Bundle" tag, could be any numbered entry), and both GTA San Andreas/Trilogy's Metacritic candidates (single "confident" match was actually the base classic-era release when the hint pointed at a modern Definitive Edition remaster with its own separate, lower score — rejecting was correct since the offered candidate was the wrong generation).
+- **New gotcha found this batch, not previously documented**: `research.js` can populate `genre` from an unflagged, low-confidence Metacritic match even when the identity is genuinely ambiguous — confirmed on `Graveyard Shift`, where the Steam side surfaced 3+ distinct real games sharing the exact name (flagged `multiple_candidates`), but the Metacritic side quietly attached a genre ("Action") from some match with a null score, without tripping `edition_signal_recheck` (no edition word in the hint) or ever showing that candidate to `match-disambiguator`. Manually nulled it before appending, per "blank beats a guess" — the genre came from an unverified source once the title's core identity was already established as ambiguous elsewhere. Worth revisiting `research.js` to also flag a metacritic resolution as suspect when the *same title* independently surfaces `multiple_candidates` on the Steam side, rather than treating the two sources' confidence as fully independent.
+- **Sentiment-chunk truncation recurred a fourth time (4 of the last 5 batches), again caller-side**: chunk 3's prompt was cut short at 18 of 21 titles, silently dropping `House Flipper`, `Human: Fall Flat`, and `HumanitZ` (all mid-alphabet, non-edge-case titles — no obvious reason for the cut beyond copy-paste truncation). Caught by the standard post-merge coverage diff (83 unique titles vs. 80 returned sentiment rows) before touching the checkpoint; re-ran standalone for the 3 missing titles and merged in. This remains the single most consistent failure mode in the whole pipeline — the "print/count before pasting" discipline from batch 9 prevented it that one time but isn't holding up as a reliable fix.
+- Null rates: 18% metacritic, 22% steam, 26% sentiment — the lowest sentiment-null rate in several batches, driven by a mainstream AAA-heavy title mix (GTA, Halo, Hitman, Horizon, Hogwarts Legacy, Hades) with unusually thick Steam Community discussion.
+- Also mid-batch: a user tool-rejection interrupted the sentiment dispatch after chunk 1 completed; resumed cleanly on request without needing to redo chunk 1.
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-9 (rows 1-900) are done.
-2. Split the remainder (rows 901-1399, ~5 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-10 (rows 1-1000) are done.
+2. Split the remainder (rows 1001-1399, ~4 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
