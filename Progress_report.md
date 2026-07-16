@@ -94,10 +94,18 @@ Ran the scripted pipeline on batch 6 (rows 501-600). Results appended to the che
 - **`steam-community-sentiment` truncation recurred, again on my (caller) side**: the last sentiment chunk's prompt was cut off 6 titles early (`Outlast`, `Outpost: Infinity Siege`, `Outriders`, `Outward`, `Outward: The Soroboreans`, `Overkill's The Walking Dead` never got sent). Caught immediately by the mandatory post-merge diff check (comparing `batch6_resolved.json`'s unique titles against the sentiment-results file's title list) before appending to the checkpoint — this check is now proven to catch the failure mode reliably and should stay a required step every batch, not just when something looks off.
 - Null rates: 26% metacritic, 47% steam, 57% sentiment — this batch's title mix (NBA 2K yearly entries, MotoGP yearly entries, older Need for Speed titles) is genuinely thin on both Metacritic coverage and Steam Community discussion; a real content-mix effect, not a pipeline regression (spot-checked a few: e.g. NBA 2K14-22 mostly have no current Steam listing history in `storesearch`).
 
+## Batch 7 run (done)
+
+Ran the scripted pipeline on batch 7 (rows 601-700). Results appended to the checkpoint (`batch: 7`, 100 rows, checkpoint now at 700 total).
+
+- 91 unique titles, 24 flagged ambiguous. `match-disambiguator` correctly nulled bare franchise names with no true single answer among the offered candidates (`Prototype 2` — none of its Steam "candidates" were the actual game; `Project CARS` — candidates were telemetry utility apps, not the racing game itself; bare `Prince of Persia` from a raw listing with no edition/year hint — genuinely ambiguous among 1989/2008/etc. releases).
+- Sentiment-chunk verification (mandatory since batch 6) passed clean this run for all 4 chunks — first batch since the process was introduced where every chunk's prompt matched its saved chunk file on the first try, no re-runs needed.
+- Null rates: 35% metacritic, 25% steam, 38% sentiment — driven by a Pokémon/Nintendo-Switch cluster (5 titles: Brilliant Diamond & Shining Pearl, Legends: Arceus, Let's Go, Scarlet & Violet, Sword & Shield) that are correctly null across all three fields since they were never released on PC/Steam at all, plus the usual PES-yearly-entry thinness.
+
 ## Resume steps for a fresh session
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-6 (rows 1-600) are done.
-2. Split the remainder (rows 601-1399, ~8 batches of 100) into batches, adjusting size if preferred.
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-7 (rows 1-700) are done.
+2. Split the remainder (rows 701-1399, ~7 batches of 100) into batches, adjusting size if preferred.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
