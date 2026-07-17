@@ -146,15 +146,24 @@ Ran the scripted pipeline on batch 12 (rows 1101-1200). Results appended to the 
 - Null rates: 17% metacritic, 22% steam, 29% sentiment (29 of 90 titles null, mostly older Battlefield entries with no live Steam listing history and several thin/blank-snippet titles like `Blur`, `Bloodborne`, `Blood Strike`).
 - No new gotchas this session — this was a clean resume of already-validated work, not a fresh research pass.
 
+## Batch 13 run (done)
+
+Ran the scripted pipeline on batch 13 (rows 1201-1300). Results appended to the checkpoint (`batch: 13`, 100 rows, checkpoint now at 1300 total).
+
+- 83 unique titles, 34 flagged ambiguous (~41%) — a dense Call of Duty/Crysis/Darksiders/Company of Heroes cluster with heavy remaster/definitive-edition/deluxe-edition noise. `match-disambiguator` correctly nulled two genuinely unresolvable cases: `Constructor` (none of the 5 Steam candidates was the actual 2017 tycoon base game — all were spinoffs/remakes) and `Crysis` (all 5 candidates were sequels/remasters/editions, no plain base-game 2007 listing offered).
+- **New judgment call, made in this session rather than by the disambiguator alone**: for `Combat Master` (hint: "Season 2"), the disambiguator picked "Season 1" (metacritic) and "Season 5" (steam) as the closest available candidates but flagged this as low-confidence since neither actually matches the hinted season. Overrode both to null per "blank beats a guess" rather than accept a pick the disambiguator itself wasn't confident in — worth a spot-check if this title's real data matters.
+- Also worth noting: `Call of Duty: Modern Warfare 3` (the original 2011 numbered title) vs `Call of Duty: Modern Warfare III` (the 2023 reboot) were correctly kept as two separate clean titles by title-cleaner — same "numeral vs Roman numeral for different games" pattern as other franchises, not a formatting inconsistency.
+- **Sentiment-chunk truncation recurred yet again, caller-side**: chunk 4's prompt was cut short at 20 of 20 intended titles, but 3 titles from the end of the source chunk file (`Day of the Tentacle Remastered`, `Days Gone`, `Dead by Daylight`) never made it into the pasted prompt. Caught immediately by the standard post-merge coverage diff (83 unique titles vs. 80 returned) before touching the checkpoint; re-ran standalone for the 3 missing titles and merged in. This remains the single most consistent failure mode in the pipeline across many batches now — the coverage-diff check is what actually catches it every time, not any amount of care while pasting.
+- Null rates: 14% metacritic, 9% steam, 19% sentiment — the lowest steam-null rate of any batch so far, driven by a mainstream-AAA-heavy title mix (Call of Duty entries, Crysis trilogy, Dark Souls trilogy, Cyberpunk 2077) with unusually thick, long-running Steam store presence.
+
 ## Genre-leak bug fix (carried forward from batch 11, now standard practice)
 
 Batches 10 and 11 both found the same bug independently: when `match-disambiguator` rejects a candidate (`_choice: null`), the merge script must null `genre` too, not just `metacritic_score`/`year` or `steam_score`. Batch 12's merge script fixes this properly by **recomputing `genre` from scratch** after applying choices — `mcGenre` only comes from an *accepted* metacritic candidate, `steamGenre` only from an *accepted* steam candidate, final `genre = mcGenre || steamGenre || null` — rather than trusting whatever `genre` value happened to survive in the row from before disambiguation ran. Use this same recompute-from-accepted-sources-only pattern for batches 13-14, not the leakier "null it if you notice it" approach from batch 10.
 
-## Resume steps for batches 13-14 (after batch 12 is finished per above)
+## Resume steps for batch 14 (final batch — after which all 1,399 rows are done)
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects — note: this file lives in the *original* batch-1 session's scratchpad dir, `fe454be7-e092-463b-abad-ccf005197cc8`, not this session's; both dirs persist and are readable from a fresh session). Batches 1-12 (rows 1-1200) will be done once the above is finished.
-2. Split the remainder (rows 1201-1399, ~2 batches — 100 + 99) into batches 13 and 14.
-3. For each batch, per `context.md`'s "Current architecture":
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects — note: this file lives in the *original* batch-1 session's scratchpad dir, `fe454be7-e092-463b-abad-ccf005197cc8`, not this session's; both dirs persist and are readable from a fresh session). Batches 1-13 (rows 1-1300) are done; take rows 1301-1399 (99 rows) as batch 14 — the final batch.
+2. For batch 14, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
    - `Bash` → `node .claude/scripts/research.js <input.json> <output.json>` on the unique `{title, hint}` list (`hint` = the raw listing(s) behind that clean title, same disambiguation-hint pattern as before).
