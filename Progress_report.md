@@ -138,10 +138,22 @@ Ran the scripted pipeline on batch 11 (rows 1001-1100). Results appended to the 
 - Sentiment chunking (4 chunks of ~21) passed clean on the first try, all 83 titles covered with no truncation — first fully clean run since batch 9.
 - Null rates: 19% metacritic, 17% steam, 26% sentiment — an Assassin's Creed-heavy back half of the batch kept steam/metacritic coverage relatively high (most mainline AC entries have real, findable Steam pages) despite the franchise's heavy edition-tag noise requiring disambiguation on nearly every title.
 
-## Resume steps for a fresh session
+## Batch 12 run (done)
 
-1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects). Batches 1-11 (rows 1-1100) are done.
-2. Split the remainder (rows 1101-1399, ~3 batches of 100) into batches, adjusting size if preferred.
+Ran the scripted pipeline on batch 12 (rows 1101-1200). Results appended to the checkpoint (`batch: 12`, 100 rows, checkpoint now at 1200 total). This batch had been left mid-run in a prior session, blocked on a sustained Claude API `529 Overloaded` outage during the `steam-community-sentiment` step (confirmed platform-side, not a pipeline bug — everything through disambiguation/merged-research was already done and on disk in the scratchpad). This session simply resumed: re-verified the 5 pre-built sentiment chunk files (18 titles each, counts matched the 90 unique titles in `batch12_final_research.json` exactly), re-ran `steam-community-sentiment` on all 5 in parallel (all 5 succeeded cleanly this time, no truncation and no outage), merged, verified 90/90 title-set coverage against `batch12_final_research.json` with zero missing/extra, built the 100 final rows, and appended to the checkpoint.
+
+- 90 unique titles, 43 flagged ambiguous (~48%) — a dense Assassin's Creed/Batman/Battlefield/Borderlands/Call of Duty franchise-heavy batch with heavy remaster/edition/definitive-edition noise (carried over from the prior session's disambiguation pass, already validated).
+- Null rates: 17% metacritic, 22% steam, 29% sentiment (29 of 90 titles null, mostly older Battlefield entries with no live Steam listing history and several thin/blank-snippet titles like `Blur`, `Bloodborne`, `Blood Strike`).
+- No new gotchas this session — this was a clean resume of already-validated work, not a fresh research pass.
+
+## Genre-leak bug fix (carried forward from batch 11, now standard practice)
+
+Batches 10 and 11 both found the same bug independently: when `match-disambiguator` rejects a candidate (`_choice: null`), the merge script must null `genre` too, not just `metacritic_score`/`year` or `steam_score`. Batch 12's merge script fixes this properly by **recomputing `genre` from scratch** after applying choices — `mcGenre` only comes from an *accepted* metacritic candidate, `steamGenre` only from an *accepted* steam candidate, final `genre = mcGenre || steamGenre || null` — rather than trusting whatever `genre` value happened to survive in the row from before disambiguation ran. Use this same recompute-from-accepted-sources-only pattern for batches 13-14, not the leakier "null it if you notice it" approach from batch 10.
+
+## Resume steps for batches 13-14 (after batch 12 is finished per above)
+
+1. Read `.../scratchpad/pre_cleaned_titles.json` (1,399 `{raw, pre_cleaned}` objects — note: this file lives in the *original* batch-1 session's scratchpad dir, `fe454be7-e092-463b-abad-ccf005197cc8`, not this session's; both dirs persist and are readable from a fresh session). Batches 1-12 (rows 1-1200) will be done once the above is finished.
+2. Split the remainder (rows 1201-1399, ~2 batches — 100 + 99) into batches 13 and 14.
 3. For each batch, per `context.md`'s "Current architecture":
    - `Agent` tool → `title-cleaner` on the batch's pre-cleaned titles.
    - Dedupe by `clean_title`.
